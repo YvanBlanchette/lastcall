@@ -1,0 +1,50 @@
+{
+	"name": "lastcall",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev",
+		"build": "prisma generate && next build",
+		"start": "next start",
+		"lint": "next lint",
+		"db:push": "prisma db push",
+		"db:migrate": "prisma migrate dev",
+		"db:seed": "node prisma/seed.js",
+		"db:studio": "prisma studio",
+		"db:tunnel": "ssh -N -L 5433:127.0.0.1:5432 root@46.202.92.160"
+	},
+	"prisma": {
+		"seed": "node prisma/seed.js"
+	},
+	"dependencies": {
+		"@prisma/client": "^5.22.0",
+		"@radix-ui/react-dialog": "^1.1.2",
+		"@radix-ui/react-label": "^2.1.0",
+		"@radix-ui/react-select": "^2.1.2",
+		"@radix-ui/react-slot": "^1.1.0",
+		"@radix-ui/react-switch": "^1.1.1",
+		"bcryptjs": "^2.4.3",
+		"class-variance-authority": "^0.7.0",
+		"clsx": "^2.1.1",
+		"cloudinary": "^2.5.1",
+		"date-fns": "^4.1.0",
+		"jose": "^5.9.6",
+		"lucide-react": "^0.454.0",
+		"next": "14.2.18",
+		"next-cloudinary": "^6.16.0",
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1",
+		"tailwind-merge": "^2.5.4",
+		"tailwindcss-animate": "^1.0.7",
+		"xlsx": "^0.18.5",
+		"zod": "^3.23.8"
+	},
+	"devDependencies": {
+		"autoprefixer": "^10.4.20",
+		"eslint": "^8.57.1",
+		"eslint-config-next": "14.2.18",
+		"postcss": "^8.4.49",
+		"prisma": "^5.22.0",
+		"tailwindcss": "^3.4.15"
+	}
+}

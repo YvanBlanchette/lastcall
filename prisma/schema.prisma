@@ -1,0 +1,520 @@
+// LastCall — schéma Prisma
+// PostgreSQL. Conçu pour que les phases 2 à 4 du brief (imports, alertes,
+// analytics, feeds fournisseurs) n'exigent aucune migration destructive.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------
+// Identité et organisations
+// ----------------------------------------------------------------
+
+enum Role {
+  ADVISOR
+  AGENCY_ADMIN
+  SUPPLIER
+  BDM
+  PLATFORM_ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  firstName     String
+  lastName      String
+  phone         String?
+  locale        String    @default("fr-CA")
+  role          Role      @default(ADVISOR)
+  status        VerificationStatus @default(PENDING)
+  avatarUrl     String?
+  lastSeenAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships     AgencyMember[]
+  bdmProfile      BDMProfile?
+  listings        Listing[]        @relation("ListingAuthor")
+  sentRequests    InterestRequest[] @relation("RequestBuyer")
+  receivedRequests InterestRequest[] @relation("RequestSeller")
+  savedSearches   SavedSearch[]
+  notifications   Notification[]
+  searchEvents    SearchEvent[]
+  listingViews    ListingView[]
+  importBatches   ImportBatch[]
+  auditLogs       AuditLog[]
+
+  @@index([role, status])
+}
+
+model Agency {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  // Identifiant professionnel selon le marché (OPC au Québec, TICO en Ontario…)
+  licenseNumber String?
+  licenseRegion String?
+  // Identifiant commercial international de l'agence (IATA, CLIA, TIDS)
+  agencyIdCategory String?
+  agencyId         String?
+  consortium    String?  // réseau hôte / consortium
+  website       String?
+  city          String?
+  province      String?
+  country       String   @default("CA")
+  logoUrl       String?
+  status        VerificationStatus @default(PENDING)
+  verifiedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  members       AgencyMember[]
+  listings      Listing[]
+  requests      InterestRequest[]
+  subscription  Subscription?
+  importBatches ImportBatch[]
+
+  @@index([status])
+}
+
+model AgencyMember {
+  id        String   @id @default(cuid())
+  userId    String
+  agencyId  String
+  role      Role     @default(ADVISOR)
+  isPrimary Boolean  @default(false)
+  joinedAt  DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agency Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agencyId])
+  @@index([agencyId])
+}
+
+model Supplier {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  category    String? // croisiériste, tour opérateur, réceptif…
+  logoUrl     String?
+  website     String?
+  description String?
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  listings    Listing[]
+  bdmProfiles BDMProfile[]
+  ships       Ship[]
+}
+
+model Ship {
+  id         String @id @default(cuid())
+  supplierId String
+  name       String
+
+  supplier Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  listings Listing[]
+
+  @@unique([supplierId, name])
+}
+
+model BDMProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  supplierId  String
+  territories String[] // ex. ["QC", "Maritimes"]
+  title       String?
+  createdAt   DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([supplierId])
+}
+
+// ----------------------------------------------------------------
+// Inventaire
+// ----------------------------------------------------------------
+
+enum TravelType {
+  CRUISE
+  ESCORTED_TOUR
+  PACKAGE
+  OTHER
+}
+
+enum InventoryType {
+  CABINS
+  SEATS
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  SOLD_OUT
+  RELEASED
+  EXPIRED
+  ARCHIVED
+}
+
+enum Visibility {
+  B2B_ONLY
+  MEMBERS_ONLY
+  PUBLIC
+}
+
+model Listing {
+  id         String @id @default(cuid())
+  // Clé fournie par l'agence : permet le réimport idempotent d'un même fichier.
+  externalId String?
+
+  agencyId   String
+  authorId   String
+  supplierId String?
+  shipId     String?
+
+  title         String
+  travelType    TravelType
+  destination   String
+  countryCode   String?
+  departureCity String
+  departureDate DateTime
+  returnDate    DateTime?
+  nights        Int?
+  language      String     @default("fr")
+
+  inventoryType  InventoryType
+  inventoryTotal Int?
+  inventoryLeft  Int
+  cabinCategory  String?
+  soloAvailable  Boolean @default(false)
+  guaranteed     Boolean @default(false)
+
+  price     Decimal @db.Decimal(10, 2)
+  currency  String  @default("CAD")
+  priceHidden Boolean @default(false) // masque le tarif sous le seuil de visibilité
+
+  releaseDate DateTime
+  expiresAt   DateTime? // par défaut = releaseDate, calculé à l'écriture
+
+  groupBenefits   String?
+  conditions      String?
+  commissionSplit String?
+  notes           String?
+
+  status     ListingStatus @default(DRAFT)
+  visibility Visibility    @default(B2B_ONLY)
+
+  // Score de priorisation (marketplace, infolettre, mises en vedette).
+  // Recalculé par tâche planifiée, pas à la lecture.
+  score        Float    @default(0)
+  scoredAt     DateTime?
+  viewCount    Int      @default(0)
+  requestCount Int      @default(0)
+
+  importBatchId String?
+  publishedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  agency      Agency            @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  author      User              @relation("ListingAuthor", fields: [authorId], references: [id])
+  supplier    Supplier?         @relation(fields: [supplierId], references: [id])
+  ship        Ship?             @relation(fields: [shipId], references: [id])
+  importBatch ImportBatch?      @relation(fields: [importBatchId], references: [id])
+  images      ListingImage[]
+  requests    InterestRequest[]
+  views       ListingView[]
+  placements  FeaturedPlacement[]
+
+  @@unique([agencyId, externalId])
+  @@index([status, visibility, releaseDate])
+  @@index([destination, departureDate])
+  @@index([supplierId, departureDate])
+  @@index([departureCity, language])
+  @@index([agencyId, status])
+  @@index([score])
+}
+
+model ListingImage {
+  id         String @id @default(cuid())
+  listingId  String
+  // Cloudinary : on stocke publicId + URL, jamais le binaire.
+  publicId   String
+  url        String
+  width      Int?
+  height     Int?
+  format     String?
+  bytes      Int?
+  alt        String?
+  position   Int    @default(0)
+  isCover    Boolean @default(false)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, position])
+}
+
+// ----------------------------------------------------------------
+// Mise en relation
+// ----------------------------------------------------------------
+
+enum RequestStatus {
+  NEW
+  VIEWED
+  RESPONDED
+  CONNECTED
+  CLOSED
+  DECLINED
+}
+
+model InterestRequest {
+  id                String @id @default(cuid())
+  listingId         String
+  buyerUserId       String
+  sellerUserId      String
+  buyerAgencyId     String
+  message           String?
+  numberOfTravelers Int    @default(1)
+  status            RequestStatus @default(NEW)
+
+  // Marqué par le vendeur : sert de base à toute mesure d'attribution
+  // et, plus tard, à la facturation. Déclaratif, jamais automatique.
+  outcomeBooked Boolean   @default(false)
+  outcomeNote   String?
+  respondedAt   DateTime?
+  connectedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  listing     Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer       User    @relation("RequestBuyer", fields: [buyerUserId], references: [id])
+  seller      User    @relation("RequestSeller", fields: [sellerUserId], references: [id])
+  buyerAgency Agency  @relation(fields: [buyerAgencyId], references: [id])
+
+  @@index([sellerUserId, status])
+  @@index([buyerUserId, status])
+  @@index([listingId])
+}
+
+// ----------------------------------------------------------------
+// Recherche, alertes, signaux
+// ----------------------------------------------------------------
+
+model SavedSearch {
+  id     String @id @default(cuid())
+  userId String
+  name   String
+
+  // Critères normalisés : mêmes clés que les filtres du marketplace,
+  // pour qu'un listing puisse être apparié à l'écriture.
+  destination   String?
+  travelType    TravelType?
+  language      String?
+  departureCity String?
+  supplierId    String?
+  dateFrom      DateTime?
+  dateTo        DateTime?
+  priceMax      Decimal?    @db.Decimal(10, 2)
+  currency      String?
+  soloOnly      Boolean     @default(false)
+  guaranteedOnly Boolean    @default(false)
+  cabinCategory String?
+  rawFilters    Json?
+
+  alertsEnabled Boolean  @default(true)
+  alertChannel  String   @default("EMAIL") // EMAIL | IN_APP | BOTH
+  lastMatchedAt DateTime?
+  matchCount    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([destination, language])
+}
+
+// Chaque recherche exécutée, y compris celles sans résultat :
+// c'est la source de la « demande non satisfaite ».
+model SearchEvent {
+  id          String   @id @default(cuid())
+  userId      String?
+  agencyId    String?
+  query       String?
+  filters     Json?
+  resultCount Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([resultCount]) // 0 résultat = demande non satisfaite
+}
+
+model ListingView {
+  id        String   @id @default(cuid())
+  listingId String
+  userId    String?
+  source    String? // MARKETPLACE | NEWSLETTER | ALERT | DIRECT
+  createdAt DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([listingId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // NEW_MATCH | REQUEST_RECEIVED | LISTING_EXPIRING | IMPORT_DONE…
+  title     String
+  body      String?
+  entityId  String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model EmailCampaign {
+  id          String    @id @default(cuid())
+  type        String    @default("NEWSLETTER")
+  subject     String
+  segment     Json?     // critères de ciblage
+  listingIds  String[]
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  recipients  Int       @default(0)
+  opens       Int       @default(0)
+  clicks      Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([sentAt])
+}
+
+// ----------------------------------------------------------------
+// Imports
+// ----------------------------------------------------------------
+
+enum ImportStatus {
+  UPLOADED
+  PARSING
+  NEEDS_REVIEW
+  COMPLETED
+  FAILED
+}
+
+model ImportBatch {
+  id          String @id @default(cuid())
+  agencyId    String
+  userId      String
+  fileName    String
+  fileUrl     String?
+  source      String @default("EXCEL") // EXCEL | API | FEED | AI_EXTRACT
+  status      ImportStatus @default(UPLOADED)
+  rowCount    Int    @default(0)
+  successCount Int   @default(0)
+  errorCount  Int    @default(0)
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  agency   Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  user     User        @relation(fields: [userId], references: [id])
+  rows     ImportRow[]
+  listings Listing[]
+
+  @@index([agencyId, createdAt])
+}
+
+model ImportRow {
+  id        String  @id @default(cuid())
+  batchId   String
+  rowNumber Int
+  raw       Json
+  parsed    Json?
+  // Messages destinés à l'utilisateur, en langage humain :
+  // « La date de relâche est manquante », pas « invalid value row 16 ».
+  errors    String[]
+  listingId String?
+  createdAt DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, rowNumber])
+}
+
+// ----------------------------------------------------------------
+// Monétisation et administration
+// ----------------------------------------------------------------
+
+enum PlanTier {
+  FREE
+  ADVISOR_PRO
+  SUPPLIER_PRO
+  ENTERPRISE
+}
+
+model Subscription {
+  id                 String   @id @default(cuid())
+  agencyId           String   @unique
+  tier               PlanTier @default(FREE)
+  status             String   @default("ACTIVE")
+  stripeCustomerId   String?
+  stripeSubscriptionId String?
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  agency Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+}
+
+model FeaturedPlacement {
+  id        String   @id @default(cuid())
+  listingId String
+  kind      String   // FEATURED | URGENT_BOOST | NEWSLETTER_TOP | SPONSORED
+  startsAt  DateTime
+  endsAt    DateTime
+  amount    Decimal? @db.Decimal(10, 2)
+  currency  String   @default("CAD")
+  createdAt DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([kind, startsAt, endsAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   // LISTING_PUBLISHED | AGENCY_VERIFIED | LISTING_REMOVED…
+  entityType String
+  entityId   String
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
