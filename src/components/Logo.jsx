@@ -44,8 +44,11 @@ const LOGO_SIZES = {
 	},
 };
 
-const Logo = ({ size = "md", className = "" }) => {
+const Logo = ({ size = "md", className = "", theme = "light" }) => {
 	const scale = LOGO_SIZES[size] ?? LOGO_SIZES.md;
+
+	const logoSrc = theme === "dark" ? "/images/lastcall-icon--dark.svg" : "/images/lastcall-icon.svg";
+	const wordmarkColor = theme === "dark" ? "text-white" : "text-slate-950";
 
 	return (
 		<Link
@@ -53,14 +56,14 @@ const Logo = ({ size = "md", className = "" }) => {
 			className={`inline-flex items-center ${scale.gap} ${className}`.trim()}
 		>
 			<Image
-				src="/images/lastcall-icon.svg"
+				src={logoSrc}
 				alt="LastCall"
 				width={40}
 				height={40}
 				className={`${scale.icon} shrink-0`}
 			/>
 
-			<span className={`font-bold tracking-[-0.025em] ${scale.wordmark}`}>
+			<span className={`font-bold tracking-[-0.025em] ${wordmarkColor} ${scale.wordmark}`}>
 				Last
 				<span className="ml-1 text-orange-500">Call</span>
 			</span>
