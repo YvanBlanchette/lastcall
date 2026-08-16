@@ -133,6 +133,16 @@ export default function RegisterPage() {
 					name="accountType"
 					value={values.accountType}
 				/>
+				{/* Les champs de l'étape 1 sont démontés : on les renvoie tout de même à la soumission. */}
+				{step === 2 &&
+					STEP_ONE_FIELDS.map((field) => (
+						<input
+							key={field}
+							type="hidden"
+							name={field}
+							value={values[field]}
+						/>
+					))}
 				<div className="space-y-4">
 					{step === 1 ? (
 						<>
