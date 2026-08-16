@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useTransition } from "react";
 import { Eye, Inbox, Minus, Plus, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,11 @@ export function ListingRow({ listing }) {
 	const [pending, start] = useTransition();
 	const toast = useToast();
 	const days = daysUntil(listing.releaseDate);
+	const authorProfileHref = listing.author
+		? listing.author.publicIdentifier
+			? `/@${listing.author.publicIdentifier}`
+			: `/profil-public/${listing.author.id}`
+		: null;
 
 	const change = (delta) => {
 		const next = Math.max(0, left + delta);
@@ -54,42 +60,64 @@ export function ListingRow({ listing }) {
 
 	return (
 		<Card className="flex flex-wrap items-center gap-4 p-4">
-			<Link
-				href={`/listing/${listing.id}`}
-				className="flex min-w-0 flex-1 items-center gap-4"
-			>
-				<div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-cyan-200 to-navy-600">
-					{listing.images?.[0] && (
-						<img
-							src={listing.images[0].url}
-							alt=""
-							className="h-full w-full object-cover"
-						/>
-					)}
-				</div>
-				<div className="min-w-0">
-					<h3 className="truncate font-semibold text-navy-900">{listing.title}</h3>
-					<p className="text-xs text-navy-500">
-						{listing.supplier?.name ?? "Sans fournisseur"} · Départ {formatDate(listing.departureDate)}
+			<div className="min-w-0 flex-1">
+				<Link
+					href={`/listing/${listing.id}`}
+					className="flex min-w-0 items-center gap-4"
+				>
+					<div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-cyan-200 to-navy-600">
+						{listing.images?.[0] && (
+							<Image
+								src={listing.images[0].url}
+								alt=""
+								width={80}
+								height={56}
+								className="h-full w-full object-cover"
+							/>
+						)}
+					</div>
+					<div className="min-w-0">
+						<h3 className="truncate font-semibold text-navy-900">{listing.title}</h3>
+						<p className="text-xs text-navy-500">
+							{listing.supplier?.name ?? "Sans fournisseur"} · Départ {formatDate(listing.departureDate)}
+						</p>
+						<p className="mt-1 flex items-center gap-3 text-xs text-navy-400">
+							<span className="flex items-center gap-1">
+								<Eye
+									className="h-3 w-3"
+									aria-hidden
+								/>{" "}
+								{listing._count?.views ?? 0}
+							</span>
+							<span className="flex items-center gap-1">
+								<Inbox
+									className="h-3 w-3"
+									aria-hidden
+								/>{" "}
+								{listing._count?.requests ?? 0}
+							</span>
+						</p>
+					</div>
+				</Link>
+
+				{listing.author && (
+					<p className="mt-1 truncate text-xs text-navy-500">
+						Agent affilie:{" "}
+						{authorProfileHref ? (
+							<Link
+								href={authorProfileHref}
+								className="font-medium text-urgent-600 hover:underline"
+							>
+								{listing.author.firstName} {listing.author.lastName}
+							</Link>
+						) : (
+							<>
+								{listing.author.firstName} {listing.author.lastName}
+							</>
+						)}
 					</p>
-					<p className="mt-1 flex items-center gap-3 text-xs text-navy-400">
-						<span className="flex items-center gap-1">
-							<Eye
-								className="h-3 w-3"
-								aria-hidden
-							/>{" "}
-							{listing._count?.views ?? 0}
-						</span>
-						<span className="flex items-center gap-1">
-							<Inbox
-								className="h-3 w-3"
-								aria-hidden
-							/>{" "}
-							{listing._count?.requests ?? 0}
-						</span>
-					</p>
-				</div>
-			</Link>
+				)}
+			</div>
 
 			<div
 				className="flex items-center gap-1"

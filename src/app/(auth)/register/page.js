@@ -7,9 +7,11 @@ import { Input, Select } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { registerAction } from "@/actions/auth";
+import { SUPPLIER_CATEGORIES } from "@/lib/validators";
 import Logo from "@/components/Logo";
 
 const INITIAL_VALUES = {
+	accountType: "agency",
 	firstName: "",
 	lastName: "",
 	email: "",
@@ -20,10 +22,13 @@ const INITIAL_VALUES = {
 	agencyId: "",
 	licenseNumber: "",
 	consortium: "",
+	supplierName: "",
+	supplierCategory: "Croisiériste",
+	supplierWebsite: "",
 };
 
 const STEP_ONE_FIELDS = ["firstName", "lastName", "email", "phone", "password"];
-const STEP_TWO_FIELDS = ["agencyName", "agencyIdCategory", "agencyId", "licenseNumber", "consortium"];
+const STEP_TWO_FIELDS = ["agencyName", "agencyIdCategory", "agencyId", "licenseNumber", "consortium", "supplierName", "supplierCategory", "supplierWebsite"];
 
 export default function RegisterPage() {
 	const [state, formAction] = useFormState(registerAction, {});
@@ -78,6 +83,8 @@ export default function RegisterPage() {
 		return clientErrors[name] ?? state?.errors?.[name];
 	}
 
+	const isSupplier = values.accountType === "supplier";
+
 	return (
 		<div className="rounded-xl bg-white p-8 shadow-sm ring-1 ring-navy-100 h-[90vh]">
 			{/* BRAND */}
@@ -87,14 +94,45 @@ export default function RegisterPage() {
 					className="mx-auto"
 				/>
 			</div>
-			<h1 className="text-xl font-bold text-navy-900">Inscrire mon agence</h1>
+			<h1 className="text-xl font-bold text-navy-900">{isSupplier ? "Inscrire mon entreprise" : "Inscrire mon agence"}</h1>
 			<p className="mt-0.5 text-sm text-navy-500">Réservé aux professionnels du voyage. La vérification prend environ 24 h ouvrables.</p>
+
+			{/* ACCOUNT TYPE */}
+			<div
+				className="mt-4 grid gap-2 sm:grid-cols-2"
+				role="radiogroup"
+				aria-label="Type de compte"
+			>
+				{[
+					{ value: "agency", label: "Agence de voyages", hint: "J'achète et je revends des espaces groupe." },
+					{ value: "supplier", label: "Fournisseur", hint: "Je publie les places restantes de mes départs." },
+				].map((option) => (
+					<button
+						key={option.value}
+						type="button"
+						role="radio"
+						aria-checked={values.accountType === option.value}
+						onClick={() => updateValue("accountType", option.value)}
+						className={`rounded-lg border p-3 text-left transition ${
+							values.accountType === option.value ? "border-orange-500 bg-orange-50" : "border-navy-200 hover:bg-navy-50"
+						}`}
+					>
+						<span className="block text-sm font-semibold text-navy-900">{option.label}</span>
+						<span className="mt-0.5 block text-xs text-navy-500">{option.hint}</span>
+					</button>
+				))}
+			</div>
 
 			{/* FORM */}
 			<form
 				action={formAction}
 				className="mt-4 flex flex-col justify-between max-h-full"
 			>
+				<input
+					type="hidden"
+					name="accountType"
+					value={values.accountType}
+				/>
 				<div className="space-y-4">
 					{step === 1 ? (
 						<>
@@ -182,82 +220,144 @@ export default function RegisterPage() {
 					) : (
 						<>
 							{/* STEP TWO */}
-							<Field
-								label="Nom de l'agence"
-								htmlFor="agencyName"
-								error={fieldError("agencyName")}
-								required
-							>
-								<Input
-									id="agencyName"
-									name="agencyName"
-									placeholder="Voyages Horizon"
-									value={values.agencyName}
-									onChange={(event) => updateValue("agencyName", event.target.value)}
-								/>
-							</Field>
-
-							<div className="grid gap-4 sm:grid-cols-2">
-								<Field
-									label="Identifiant de l'agence"
-									htmlFor="agencyIdCategory"
-									hint="Ou l'équivalent de votre province."
-								>
-									<Select
-										id="agencyIdCategory"
-										name="agencyIdCategory"
-										value={values.agencyIdCategory}
-										onChange={(event) => updateValue("agencyIdCategory", event.target.value)}
-									>
-										<option value="iata">IATA</option>
-										<option value="clia">CLIA</option>
-										<option value="tids">TIDS</option>
-									</Select>
-								</Field>
-								<Field
-									label="Identification de l'agence"
-									htmlFor="agencyId"
-									error={fieldError("agencyId")}
-									required
-								>
-									<Input
-										id="agencyId"
-										name="agencyId"
-										placeholder="Ex. 96147796, 96141550…"
+							{isSupplier ? (
+								<>
+									<Field
+										label="Nom de l'entreprise"
+										htmlFor="supplierName"
+										error={fieldError("supplierName")}
 										required
-										value={values.agencyId}
-										onChange={(event) => updateValue("agencyId", event.target.value)}
-									/>
-								</Field>
-							</div>
+									>
+										<Input
+											id="supplierName"
+											name="supplierName"
+											placeholder="Royal Caribbean, Sunwing…"
+											value={values.supplierName}
+											onChange={(event) => updateValue("supplierName", event.target.value)}
+										/>
+									</Field>
 
-							<div className="grid gap-4 sm:grid-cols-2">
-								<Field
-									label="Numéro OPC"
-									htmlFor="licenseNumber"
-									hint="Ou l'équivalent de votre province."
-								>
-									<Input
-										id="licenseNumber"
-										name="licenseNumber"
-										placeholder="702000"
-										value={values.licenseNumber}
-										onChange={(event) => updateValue("licenseNumber", event.target.value)}
-									/>
-								</Field>
-								<Field
-									label="Réseau / consortium"
-									htmlFor="consortium"
-								>
-									<Input
-										id="consortium"
-										name="consortium"
-										placeholder="Ex. Ensemble, Virtuoso…"
-										value={values.consortium}
-										onChange={(event) => updateValue("consortium", event.target.value)}
-									/>
-								</Field>
-							</div>
+									<div className="grid gap-4 sm:grid-cols-2">
+										<Field
+											label="Catégorie"
+											htmlFor="supplierCategory"
+											error={fieldError("supplierCategory")}
+										>
+											<Select
+												id="supplierCategory"
+												name="supplierCategory"
+												value={values.supplierCategory}
+												onChange={(event) => updateValue("supplierCategory", event.target.value)}
+											>
+												{SUPPLIER_CATEGORIES.map((category) => (
+													<option
+														key={category}
+														value={category}
+													>
+														{category}
+													</option>
+												))}
+											</Select>
+										</Field>
+										<Field
+											label="Site web"
+											htmlFor="supplierWebsite"
+											error={fieldError("supplierWebsite")}
+										>
+											<Input
+												id="supplierWebsite"
+												name="supplierWebsite"
+												placeholder="https://…"
+												value={values.supplierWebsite}
+												onChange={(event) => updateValue("supplierWebsite", event.target.value)}
+											/>
+										</Field>
+									</div>
+
+									<p className="rounded-lg bg-navy-50 p-3 text-xs leading-relaxed text-navy-600">
+										Votre compte fournisseur vous permet de publier les places restantes de vos départs et de recevoir les demandes des agences vérifiées.
+									</p>
+								</>
+							) : (
+								<>
+									<Field
+										label="Nom de l'agence"
+										htmlFor="agencyName"
+										error={fieldError("agencyName")}
+										required
+									>
+										<Input
+											id="agencyName"
+											name="agencyName"
+											placeholder="Voyages Horizon"
+											value={values.agencyName}
+											onChange={(event) => updateValue("agencyName", event.target.value)}
+										/>
+									</Field>
+
+									<div className="grid gap-4 sm:grid-cols-2">
+										<Field
+											label="Identifiant de l'agence"
+											htmlFor="agencyIdCategory"
+											hint="Ou l'équivalent de votre province."
+										>
+											<Select
+												id="agencyIdCategory"
+												name="agencyIdCategory"
+												value={values.agencyIdCategory}
+												onChange={(event) => updateValue("agencyIdCategory", event.target.value)}
+											>
+												<option value="iata">IATA</option>
+												<option value="clia">CLIA</option>
+												<option value="tids">TIDS</option>
+											</Select>
+										</Field>
+										<Field
+											label="Identification de l'agence"
+											htmlFor="agencyId"
+											error={fieldError("agencyId")}
+											required
+										>
+											<Input
+												id="agencyId"
+												name="agencyId"
+												placeholder="Ex. 96147796, 96141550…"
+												required
+												value={values.agencyId}
+												onChange={(event) => updateValue("agencyId", event.target.value)}
+											/>
+										</Field>
+									</div>
+
+									<div className="grid gap-4 sm:grid-cols-2">
+										<Field
+											label="Numéro OPC"
+											htmlFor="licenseNumber"
+											hint="Ou l'équivalent de votre province."
+										>
+											<Input
+												id="licenseNumber"
+												name="licenseNumber"
+												placeholder="702000"
+												value={values.licenseNumber}
+												onChange={(event) => updateValue("licenseNumber", event.target.value)}
+											/>
+										</Field>
+										<Field
+											label="Réseau / consortium"
+											htmlFor="consortium"
+										>
+											<Input
+												id="consortium"
+												name="consortium"
+												placeholder="Ex. Ensemble, Virtuoso…"
+												value={values.consortium}
+												onChange={(event) => updateValue("consortium", event.target.value)}
+											/>
+										</Field>
+									</div>
+								</>
+							)}
 						</>
 					)}
 

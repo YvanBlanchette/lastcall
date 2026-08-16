@@ -3,7 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Home, Store, PlusCircle, FileText, Inbox, Bookmark, Upload, Building2, User, HelpCircle, Menu, X, ShieldCheck } from "lucide-react";
+import {
+	Home,
+	Store,
+	PlusCircle,
+	FileText,
+	Inbox,
+	Bookmark,
+	Upload,
+	Building2,
+	User,
+	HelpCircle,
+	Menu,
+	X,
+	ShieldCheck,
+	Users,
+	MessageSquare,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import Logo from "../Logo";
 
@@ -13,18 +29,21 @@ const NAV = [
 	// { href: "/publier", label: "Publier un espace", icon: PlusCircle },
 	{ href: "/mes-annonces", label: "Annonces", icon: FileText },
 	{ href: "/demandes", label: "Demandes", icon: Inbox, badgeKey: "requests" },
-	{ href: "/recherches", label: "Recherches", icon: Bookmark },
+	{ href: "/relations", label: "Relations", icon: Users, badgeKey: "relations", agencyOnly: true },
+	// { href: "/messagerie", label: "Messagerie", icon: MessageSquare, badgeKey: "messages" },
+	{ href: "/recherches", label: "Recherches", icon: Bookmark, agencyOnly: true },
 	// { href: "/imports", label: "Imports", icon: Upload },
-	{ href: "/agence", label: "Agence", icon: Building2 },
-	{ href: "/profil", label: "Profil", icon: User },
+	// { href: "/agence", label: "Agence", icon: Building2 },
+	// { href: "/profil", label: "Profil", icon: User },
 ];
 
 export function Sidebar({ user, counts = {} }) {
 	const pathname = usePathname();
 	const [open, setOpen] = useState(false);
-	const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase();
 
-	const items = user.role === "PLATFORM_ADMIN" ? [...NAV, { href: "/admin", label: "Administration", icon: ShieldCheck }] : NAV;
+	const isSupplier = Boolean(user.supplierId);
+	const baseNav = isSupplier ? NAV.filter((item) => !item.agencyOnly) : NAV;
+	const items = user.role === "PLATFORM_ADMIN" ? [...baseNav, { href: "/admin", label: "Administration", icon: ShieldCheck }] : baseNav;
 
 	return (
 		<>
@@ -48,10 +67,10 @@ export function Sidebar({ user, counts = {} }) {
 				className={"fixed inset-y-0 left-0 z-50 flex w-64 flex-col justify-between h-full bg-navy-900 p-4 transition-transform lg:static lg:translate-x-0"}
 			>
 				<div className="flex min-h-0 flex-1 flex-col">
-					<div className="shrink-0 flex items-center justify-center border-b border-navy-300 py-2">
+					<div className="shrink-0 flex items-center justify-center mb-6 pt-2">
 						<Logo
 							theme="dark"
-							size="lg"
+							size="md"
 						/>
 						{/* <button
 						onClick={() => setOpen(false)}
@@ -95,18 +114,11 @@ export function Sidebar({ user, counts = {} }) {
 
 				<div className="mt-4 shrink-0">
 					<div className="mt-4 border-t border-navy-300 pt-4">
-						<div className="flex items-center gap-3">
-							<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-urgent-500 text-sm font-bold text-white">{initials}</div>
-							<div className="min-w-0">
-								<p className="truncate text-sm font-medium text-white">
-									{user.firstName} {user.lastName}
-								</p>
-								<p className="truncate text-xs text-navy-300">{user.agency?.name ?? "Sans agence"}</p>
-							</div>
-						</div>
 						{user.status !== "VERIFIED" && (
 							<p className="mt-3 rounded-lg bg-navy-800 p-2.5 text-xs leading-relaxed text-navy-200">
-								Votre agence est en cours de vérification. Les inventaires réservés aux professionnels vérifiés restent masqués d&apos;ici là.
+								{isSupplier
+									? "Votre compte fournisseur est en cours de vérification. Vos annonces seront visibles par le réseau dès l'approbation."
+									: "Votre agence est en cours de vérification. Les inventaires réservés aux professionnels vérifiés restent masqués d'ici là."}
 							</p>
 						)}
 					</div>

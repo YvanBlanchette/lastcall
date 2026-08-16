@@ -1,18 +1,20 @@
 import Link from "next/link";
 import { FileText, Plus, Upload } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { requireAgency } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
+import { listingOwnerWhere } from "@/lib/org";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ListingRow } from "@/components/listings/listing-row";
+import { toPlain } from "@/lib/utils";
 
 export const metadata = { title: "Mes annonces" };
 
 export default async function MesAnnoncesPage({ searchParams }) {
-	const user = await requireAgency();
+	const user = await requireOrg();
 
-	const where = { agencyId: user.agencyId };
+	const where = listingOwnerWhere(user);
 	if (searchParams.filtre === "urgent") {
 		where.releaseDate = { lte: new Date(Date.now() + 14 * 86_400_000), gte: new Date() };
 		where.status = "ACTIVE";
@@ -23,13 +25,17 @@ export default async function MesAnnoncesPage({ searchParams }) {
 		include: {
 			supplier: true,
 			images: { take: 1, orderBy: { position: "asc" } },
+			author: { select: { id: true, firstName: true, lastName: true, publicIdentifier: true } },
 			_count: { select: { requests: true, views: true } },
 		},
 		orderBy: [{ status: "asc" }, { releaseDate: "asc" }],
 	});
 
+	// Empêche l'envoi de Prisma Decimal/Date bruts vers un composant client.
+	const listingsSafe = toPlain(listings);
+
 	return (
-		<div className="mx-auto max-w-4xl px-6 py-8">
+		<div className="page-shell page-shell-lg">
 			<PageHeader
 				title="Mes annonces"
 				description="Vos espaces publiés, leur inventaire et leur date de relâche."
@@ -64,7 +70,7 @@ export default async function MesAnnoncesPage({ searchParams }) {
 			/>
 
 			<div className="mt-6 space-y-3">
-				{listings.length === 0 ? (
+				{listingsSafe.length === 0 ? (
 					<EmptyState
 						icon={FileText}
 						title="Aucune annonce pour l'instant"
@@ -76,7 +82,7 @@ export default async function MesAnnoncesPage({ searchParams }) {
 						}
 					/>
 				) : (
-					listings.map((l) => (
+					listingsSafe.map((l) => (
 						<ListingRow
 							key={l.id}
 							listing={l}

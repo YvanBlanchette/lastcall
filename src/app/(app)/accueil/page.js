@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FileText, Inbox, AlertTriangle, TrendingUp, Plus, Search } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser, visibilityScopeFor, canSeePrice } from "@/lib/auth";
+import { listingOwnerWhere } from "@/lib/org";
 import { PageHeader } from "@/components/layout/page-header";
 import { ListingCard } from "@/components/listings/listing-card";
 import { Button } from "@/components/ui/button";
@@ -41,20 +42,21 @@ export default async function AccueilPage() {
 	const user = await requireUser();
 	const scope = visibilityScopeFor(user);
 	const in14days = new Date(Date.now() + 14 * 86_400_000);
+	const ownerWhere = listingOwnerWhere(user);
 
 	const [active, newRequests, expiring, views, latest] = await Promise.all([
-		prisma.listing.count({ where: { agencyId: user.agencyId ?? "", status: "ACTIVE" } }),
+		prisma.listing.count({ where: { ...ownerWhere, status: "ACTIVE" } }),
 		prisma.interestRequest.count({ where: { sellerUserId: user.id, status: "NEW" } }),
 		prisma.listing.count({
 			where: {
-				agencyId: user.agencyId ?? "",
+				...ownerWhere,
 				status: "ACTIVE",
 				releaseDate: { lte: in14days, gte: new Date() },
 			},
 		}),
 		prisma.listingView.count({
 			where: {
-				listing: { agencyId: user.agencyId ?? "" },
+				listing: ownerWhere,
 				createdAt: { gte: new Date(Date.now() - 7 * 86_400_000) },
 			},
 		}),
@@ -63,16 +65,20 @@ export default async function AccueilPage() {
 				status: "ACTIVE",
 				visibility: { in: scope },
 				releaseDate: { gte: new Date() },
-				NOT: { agencyId: user.agencyId ?? "" },
+				NOT: ownerWhere,
 			},
-			include: { supplier: true, images: { take: 1, orderBy: { position: "asc" } } },
+			include: {
+				supplier: true,
+				images: { take: 1, orderBy: { position: "asc" } },
+				author: { select: { id: true, firstName: true, lastName: true, publicIdentifier: true, avatarUrl: true } },
+			},
 			orderBy: [{ score: "desc" }, { publishedAt: "desc" }],
 			take: 4,
 		}),
 	]);
 
 	return (
-		<div className="mx-auto max-w-6xl px-6 py-8">
+		<div className="page-shell page-shell-xl">
 			<PageHeader
 				title={`Bonjour ${user.firstName}`}
 				description="Voici ce qui se passe aujourd'hui."
@@ -128,7 +134,7 @@ export default async function AccueilPage() {
 			</div>
 
 			<Card className="mt-6 p-5">
-				<h2 className="font-semibold text-navy-900">Que cherchez-vous aujourd&apos;hui ?</h2>
+				<h2 className="section-title">Que cherchez-vous aujourd&apos;hui ?</h2>
 				<form
 					action="/marketplace"
 					className="mt-3 flex gap-2"
@@ -160,8 +166,8 @@ export default async function AccueilPage() {
 				</div>
 			</Card>
 
-			<div className="mt-8 flex items-center justify-between">
-				<h2 className="font-semibold text-navy-900">Dernières annonces publiées</h2>
+			<div className="section-header mt-8">
+				<h2 className="section-title">Dernières annonces publiées</h2>
 				<Link
 					href="/marketplace"
 					className="text-sm font-medium text-urgent-600 hover:underline"
@@ -175,13 +181,13 @@ export default async function AccueilPage() {
 					<p className="text-sm text-navy-500">Aucune annonce publiée par une autre agence pour l&apos;instant. Publiez la vôtre pour amorcer le réseau.</p>
 				</Card>
 			) : (
-				<div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+				<div className="mt-4 space-y-4">
 					{latest.map((l) => (
 						<ListingCard
 							key={l.id}
 							listing={l}
 							canSeePrice={canSeePrice(l, user)}
-							compact
+							variant="feed"
 						/>
 					))}
 				</div>

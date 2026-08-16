@@ -18,7 +18,7 @@ export default async function RecherchesPage() {
   });
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
+    <div className="page-shell page-shell-md">
       <PageHeader
         title="Recherches sauvegardées"
         description="Nous vous écrivons dès qu'un espace correspond. Vous n'avez pas à revenir chaque jour."

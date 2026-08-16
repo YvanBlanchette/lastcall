@@ -14,6 +14,14 @@ const slug = (v) =>
 
 const inDays = (n) => new Date(Date.now() + n * 86_400_000);
 
+function assertMapValue(map, key, label) {
+	const value = map[key];
+	if (!value) {
+		throw new Error(`[seed] ${label} introuvable: "${key}"`);
+	}
+	return value;
+}
+
 const SUPPLIERS = [
 	{ name: "Royal Caribbean", category: "Croisiériste", ships: ["Wonder of the Seas"] },
 	{ name: "Holland America", category: "Croisiériste", ships: ["Koningsdam"] },
@@ -25,7 +33,7 @@ const SUPPLIERS = [
 ];
 
 const AGENCIES = [
-	{ name: "Voyages Horizon", agencyIdCategory: "IATA", agencyId: "96147796", licenseNumber: "702451", consortium: "Ensemble", city: "Montréal" },
+	{ name: "ÆRIA Voyages", agencyIdCategory: "IATA", agencyId: "96147796", licenseNumber: "703633", consortium: "TravelSavers", city: "Montréal" },
 	{ name: "Groupe Évasion", agencyIdCategory: "IATA", agencyId: "96141550", licenseNumber: "703112", consortium: "Virtuoso", city: "Québec" },
 	{ name: "Croisières Boréal", agencyIdCategory: "CLIA", agencyId: "C78211", licenseNumber: "701880", consortium: null, city: "Laval" },
 	{ name: "Agence Soleil", agencyIdCategory: "TIDS", agencyId: "T55012", licenseNumber: null, consortium: null, city: "Sherbrooke" },
@@ -245,6 +253,7 @@ async function main() {
 		prisma.subscription.deleteMany(),
 		prisma.emailCampaign.deleteMany(),
 		prisma.bDMProfile.deleteMany(),
+		prisma.supplierMember.deleteMany(),
 		prisma.ship.deleteMany(),
 		prisma.supplier.deleteMany(),
 		prisma.agencyMember.deleteMany(),
@@ -270,6 +279,7 @@ async function main() {
 	const password = await bcrypt.hash("lastcall2026", 12);
 	const agencyMap = {};
 	const userMap = {};
+	let platformAdminEmail = "";
 
 	for (const [i, a] of AGENCIES.entries()) {
 		const agency = await prisma.agency.create({
@@ -289,6 +299,9 @@ async function main() {
 			},
 		});
 		agencyMap[a.name] = agency.id;
+		if (a.name === "ÆRIA Voyages") {
+			agencyMap["Voyages Horizon"] = agency.id;
+		}
 
 		const email = ["yvan", "marie", "simon", "julie"][i] + "@exemple.ca";
 		const user = await prisma.user.create({
@@ -296,39 +309,37 @@ async function main() {
 				email,
 				passwordHash: password,
 				firstName: ["Yvan", "Marie", "Simon", "Julie"][i],
-				lastName: ["Tremblay", "Lapointe", "Gagnon", "Bouchard"][i],
+				lastName: ["Blanchette", "Lapointe", "Gagnon", "Bouchard"][i],
 				phone: "514-555-0" + (100 + i),
-				role: "AGENCY_ADMIN",
+				role: i === 0 ? "PLATFORM_ADMIN" : "AGENCY_ADMIN",
 				status: i < 3 ? "VERIFIED" : "PENDING",
 				memberships: { create: { agencyId: agency.id, role: "AGENCY_ADMIN", isPrimary: true } },
 			},
 		});
+		if (i === 0) {
+			platformAdminEmail = email;
+		}
 		userMap[a.name] = user.id;
+		if (a.name === "ÆRIA Voyages") {
+			userMap["Voyages Horizon"] = user.id;
+		}
 	}
-
-	const admin = await prisma.user.create({
-		data: {
-			email: "admin@lastcall.ca",
-			passwordHash: password,
-			firstName: "Admin",
-			lastName: "LastCall",
-			role: "PLATFORM_ADMIN",
-			status: "VERIFIED",
-			memberships: { create: { agencyId: agencyMap["Voyages Horizon"], role: "PLATFORM_ADMIN" } },
-		},
-	});
 
 	console.log("Annonces…");
 	const listingIds = [];
 	for (const l of LISTINGS) {
 		const departureDate = inDays(l.departIn);
+		const agencyId = assertMapValue(agencyMap, l.agency, "Agence");
+		const authorId = assertMapValue(userMap, l.agency, "Utilisateur (auteur) pour l'agence");
+		const supplierId = assertMapValue(supplierMap, l.supplier, "Fournisseur");
+		const shipId = l.ship ? assertMapValue(shipMap, l.ship, "Navire") : null;
 		const created = await prisma.listing.create({
 			data: {
 				externalId: l.externalId,
-				agencyId: agencyMap[l.agency],
-				authorId: userMap[l.agency],
-				supplierId: supplierMap[l.supplier],
-				shipId: l.ship ? shipMap[l.ship] : null,
+				agencyId,
+				authorId,
+				supplierId,
+				shipId,
 				title: l.title,
 				travelType: l.travelType,
 				destination: l.destination,
@@ -360,6 +371,57 @@ async function main() {
 		});
 		listingIds.push(created.id);
 	}
+
+	console.log("Compte fournisseur…");
+	const demoSupplierId = supplierMap["Royal Caribbean"];
+	await prisma.supplier.update({
+		where: { id: demoSupplierId },
+		data: { status: "VERIFIED", verifiedAt: new Date(), contactEmail: "fournisseur@exemple.ca", city: "Miami", province: "FL", country: "US" },
+	});
+	const supplierUser = await prisma.user.create({
+		data: {
+			email: "fournisseur@exemple.ca",
+			passwordHash: password,
+			firstName: "Karine",
+			lastName: "Tremblay",
+			phone: "514-555-0200",
+			role: "SUPPLIER",
+			status: "VERIFIED",
+			supplierMemberships: { create: { supplierId: demoSupplierId, role: "SUPPLIER", isPrimary: true } },
+		},
+	});
+
+	await prisma.listing.create({
+		data: {
+			ownerSupplierId: demoSupplierId,
+			authorId: supplierUser.id,
+			supplierId: demoSupplierId,
+			shipId: shipMap["Wonder of the Seas"],
+			title: "Wonder of the Seas — cabines restantes du 12 mars",
+			travelType: "CRUISE",
+			destination: "Caraïbes",
+			departureCity: "Miami",
+			departureDate: inDays(210),
+			returnDate: inDays(217),
+			nights: 7,
+			language: "bilingue",
+			inventoryType: "CABINS",
+			inventoryTotal: 40,
+			inventoryLeft: 9,
+			cabinCategory: "Balcon",
+			price: 1099,
+			currency: "CAD",
+			releaseDate: inDays(35),
+			expiresAt: inDays(35),
+			groupBenefits: "Tarif fournisseur direct, crédit à bord de 75 $ US par cabine.",
+			conditions: "Allocation libérée automatiquement à la date de relâche.",
+			visibility: "B2B_ONLY",
+			status: "ACTIVE",
+			publishedAt: new Date(),
+			score: 70,
+			scoredAt: new Date(),
+		},
+	});
 
 	console.log("Recherches sauvegardées et demandes…");
 	await prisma.savedSearch.createMany({
@@ -434,7 +496,8 @@ async function main() {
 	console.log("  marie@exemple.ca  — Groupe Évasion, vérifiée");
 	console.log("  simon@exemple.ca  — Croisières Boréal, vérifiée");
 	console.log("  julie@exemple.ca  — Agence Soleil, EN ATTENTE de vérification");
-	console.log(`  ${admin.email} — administrateur plateforme`);
+	console.log("  fournisseur@exemple.ca — compte fournisseur (Royal Caribbean), vérifié");
+	console.log(`  ${platformAdminEmail} — administrateur plateforme (fusionné avec AGENCY_ADMIN de ÆRIA Voyages)`);
 }
 
 main()

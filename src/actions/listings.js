@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireAgency } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
+import { listingOwnerData, ownsListing } from "@/lib/org";
 import { listingSchema, fieldErrors } from "@/lib/validators";
 import { computeScore } from "@/lib/score";
 import { findMatchingSavedSearches } from "@/lib/matching";
@@ -42,7 +43,7 @@ async function resolveShip(tx, supplierId, shipName) {
 export async function notifyMatches(listingId) {
 	const listing = await prisma.listing.findUnique({
 		where: { id: listingId },
-		include: { agency: true },
+		include: { agency: true, ownerSupplier: true },
 	});
 	if (!listing || listing.status !== "ACTIVE") return 0;
 
@@ -79,7 +80,7 @@ export async function notifyMatches(listingId) {
 }
 
 export async function createListingAction(_prev, formData) {
-	const user = await requireAgency();
+	const user = await requireOrg();
 
 	const payload = Object.fromEntries(formData);
 	payload.images = formData.get("images") ? JSON.parse(formData.get("images")) : [];
@@ -94,16 +95,19 @@ export async function createListingAction(_prev, formData) {
 	const publish = formData.get("intent") !== "draft";
 
 	const listing = await prisma.$transaction(async (tx) => {
-		const supplierId = await resolveSupplier(tx, {
-			supplierId: d.supplierId || null,
-			supplierName: formData.get("supplierName") || null,
-		});
+		// Un fournisseur est toujours le fournisseur de ses propres départs.
+		const supplierId = user.supplierId
+			? user.supplierId
+			: await resolveSupplier(tx, {
+					supplierId: d.supplierId || null,
+					supplierName: formData.get("supplierName") || null,
+				});
 		const shipId = await resolveShip(tx, supplierId, d.shipName);
 
 		const created = await tx.listing.create({
 			data: {
 				externalId: d.externalId || null,
-				agencyId: user.agencyId,
+				...listingOwnerData(user),
 				authorId: user.id,
 				supplierId,
 				shipId,
@@ -144,7 +148,7 @@ export async function createListingAction(_prev, formData) {
 					})),
 				},
 			},
-			include: { images: true, agency: true },
+			include: { images: true, agency: true, ownerSupplier: true },
 		});
 
 		await tx.listing.update({
@@ -172,12 +176,12 @@ export async function createListingAction(_prev, formData) {
 }
 
 export async function updateListingAction(_prev, formData) {
-	const user = await requireAgency();
+	const user = await requireOrg();
 	const listingId = String(formData.get("listingId") || "").trim();
 	if (!listingId) return { errors: { _: "Annonce introuvable." } };
 
 	const existing = await prisma.listing.findUnique({ where: { id: listingId } });
-	if (!existing || existing.agencyId !== user.agencyId) {
+	if (!existing || !ownsListing(existing, user)) {
 		return { errors: { _: "Action non autorisée." } };
 	}
 
@@ -194,10 +198,12 @@ export async function updateListingAction(_prev, formData) {
 	const publish = formData.get("intent") !== "draft";
 
 	const listing = await prisma.$transaction(async (tx) => {
-		const supplierId = await resolveSupplier(tx, {
-			supplierId: d.supplierId || null,
-			supplierName: formData.get("supplierName") || null,
-		});
+		const supplierId = user.supplierId
+			? user.supplierId
+			: await resolveSupplier(tx, {
+					supplierId: d.supplierId || null,
+					supplierName: formData.get("supplierName") || null,
+				});
 		const shipId = await resolveShip(tx, supplierId, d.shipName);
 
 		const updated = await tx.listing.update({
@@ -244,7 +250,7 @@ export async function updateListingAction(_prev, formData) {
 					})),
 				},
 			},
-			include: { images: true, agency: true },
+			include: { images: true, agency: true, ownerSupplier: true },
 		});
 
 		await tx.listing.update({
@@ -275,10 +281,10 @@ export async function updateListingAction(_prev, formData) {
 }
 
 export async function updateInventoryAction(listingId, inventoryLeft) {
-	const user = await requireAgency();
+	const user = await requireOrg();
 	const listing = await prisma.listing.findUnique({ where: { id: listingId } });
-	if (!listing || listing.agencyId !== user.agencyId) {
-		return { error: "Cette annonce n'appartient pas à votre agence." };
+	if (!listing || !ownsListing(listing, user)) {
+		return { error: "Cette annonce n'appartient pas à votre organisation." };
 	}
 
 	const left = Math.max(0, Number(inventoryLeft));
@@ -296,9 +302,9 @@ export async function updateInventoryAction(listingId, inventoryLeft) {
 }
 
 export async function setListingStatusAction(listingId, status) {
-	const user = await requireAgency();
+	const user = await requireOrg();
 	const listing = await prisma.listing.findUnique({ where: { id: listingId } });
-	if (!listing || (listing.agencyId !== user.agencyId && user.role !== "PLATFORM_ADMIN")) {
+	if (!listing || (!ownsListing(listing, user) && user.role !== "PLATFORM_ADMIN")) {
 		return { error: "Action non autorisée." };
 	}
 
@@ -313,7 +319,7 @@ export async function setListingStatusAction(listingId, status) {
 }
 
 export async function uploadListingImageAction(formData) {
-	await requireAgency();
+	await requireOrg();
 	const file = formData.get("file");
 	if (!file || typeof file === "string") return { error: "Aucun fichier reçu." };
 	try {

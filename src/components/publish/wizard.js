@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { useFormState } from "react-dom";
 import { Ship, MapPin, Sparkles, Check, ChevronLeft, ChevronRight, Bed, Users, Plus, CheckCircle2, AlertTriangle, Loader2, X } from "lucide-react";
@@ -98,7 +99,7 @@ function toInitialImages(initialListing) {
 	}));
 }
 
-export function PublishWizard({ suppliers, cities, initialListing = null }) {
+export function PublishWizard({ suppliers, cities, initialListing = null, lockedSupplier = null }) {
 	const isEditing = Boolean(initialListing?.id);
 	const [step, setStep] = useState(0);
 	const [d, setD] = useState(() => toInitialValues(initialListing));
@@ -199,7 +200,7 @@ export function PublishWizard({ suppliers, cities, initialListing = null }) {
 			<div className="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-navy-100">
 				{step === 0 && (
 					<>
-						<h2 className="text-xl font-bold text-navy-900">Quel type d'espace publiez-vous ?</h2>
+						<h2 className="text-xl font-bold text-navy-900">Quel type d&apos;espace publiez-vous ?</h2>
 						<p className="mt-1 text-sm text-navy-500">Choisissez ce qui correspond le mieux à votre groupe.</p>
 						<div className="mt-5 space-y-3">
 							{TYPES.map((t) => (
@@ -235,40 +236,48 @@ export function PublishWizard({ suppliers, cities, initialListing = null }) {
 						<h2 className="text-xl font-bold text-navy-900">Parlez-nous de votre voyage</h2>
 						<p className="mt-1 text-sm text-navy-500">Les détails principaux du groupe.</p>
 						<div className="mt-5 space-y-4">
-							<Field
-								label="Fournisseur"
-								htmlFor="fournisseur"
-							>
-								<Select
-									id="fournisseur"
-									value={d.supplierId}
-									onChange={(e) => set("supplierId", e.target.value)}
-								>
-									<option value="">Sélectionnez un fournisseur</option>
-									{suppliers.map((s) => (
-										<option
-											key={s.id}
-											value={s.id}
-										>
-											{s.name}
-										</option>
-									))}
-								</Select>
-							</Field>
-
-							{!d.supplierId && (
-								<Field
-									label="…ou saisissez-en un nouveau"
-									htmlFor="nouveauFournisseur"
-									hint="Il sera ajouté au catalogue LastCall."
-								>
-									<Input
-										id="nouveauFournisseur"
-										value={d.supplierName}
-										onChange={(e) => set("supplierName", e.target.value)}
-										placeholder="Ex. Voyages Culturels"
-									/>
+							{lockedSupplier ? (
+								<Field label="Fournisseur">
+									<p className="rounded-lg bg-navy-50 px-3 py-2 text-sm font-medium text-navy-800">{lockedSupplier.name}</p>
 								</Field>
+							) : (
+								<>
+									<Field
+										label="Fournisseur"
+										htmlFor="fournisseur"
+									>
+										<Select
+											id="fournisseur"
+											value={d.supplierId}
+											onChange={(e) => set("supplierId", e.target.value)}
+										>
+											<option value="">Sélectionnez un fournisseur</option>
+											{suppliers.map((s) => (
+												<option
+													key={s.id}
+													value={s.id}
+												>
+													{s.name}
+												</option>
+											))}
+										</Select>
+									</Field>
+
+									{!d.supplierId && (
+										<Field
+											label="…ou saisissez-en un nouveau"
+											htmlFor="nouveauFournisseur"
+											hint="Il sera ajouté au catalogue LastCall."
+										>
+											<Input
+												id="nouveauFournisseur"
+												value={d.supplierName}
+												onChange={(e) => set("supplierName", e.target.value)}
+												placeholder="Ex. Voyages Culturels"
+											/>
+										</Field>
+									)}
+								</>
 							)}
 
 							<Field
@@ -380,8 +389,8 @@ export function PublishWizard({ suppliers, cities, initialListing = null }) {
 
 				{step === 2 && (
 					<>
-						<h2 className="text-xl font-bold text-navy-900">Qu'est-ce qu'il vous reste ?</h2>
-						<p className="mt-1 text-sm text-navy-500">L'inventaire disponible et le prix par personne.</p>
+						<h2 className="text-xl font-bold text-navy-900">Qu&apos;est-ce qu&apos;il vous reste ?</h2>
+						<p className="mt-1 text-sm text-navy-500">L&apos;inventaire disponible et le prix par personne.</p>
 						<div className="mt-5 space-y-4">
 							<Field label="Type d'inventaire">
 								<div className="grid grid-cols-2 gap-3">
@@ -525,7 +534,7 @@ export function PublishWizard({ suppliers, cities, initialListing = null }) {
 										{label}
 									</label>
 								))}
-								<p className="pt-1 text-xs text-navy-500">Masquer le tarif protège votre entente fournisseur tout en gardant l'annonce visible.</p>
+								<p className="pt-1 text-xs text-navy-500">Masquer le tarif protège votre entente fournisseur tout en gardant l&apos;annonce visible.</p>
 							</div>
 						</div>
 					</>
@@ -623,9 +632,11 @@ export function PublishWizard({ suppliers, cities, initialListing = null }) {
 											key={img.publicId}
 											className="relative"
 										>
-											<img
+											<Image
 												src={img.url}
 												alt=""
+												width={80}
+												height={64}
 												className="h-16 w-20 rounded-lg object-cover"
 											/>
 											<button
@@ -665,10 +676,12 @@ export function PublishWizard({ suppliers, cities, initialListing = null }) {
 						<div className="mt-5 overflow-hidden rounded-xl ring-1 ring-navy-100">
 							<div className="relative h-32 bg-gradient-to-br from-cyan-200 via-sky-400 to-navy-600">
 								{images[0] && (
-									<img
+									<Image
 										src={images[0].url}
 										alt=""
-										className="h-full w-full object-cover"
+										fill
+										sizes="(max-width: 768px) 100vw, 40vw"
+										className="object-cover"
 									/>
 								)}
 								{releaseDays !== null && releaseDays <= 21 && (
@@ -691,7 +704,7 @@ export function PublishWizard({ suppliers, cities, initialListing = null }) {
 								<h3 className="font-semibold text-navy-900">{d.title || "Titre de votre groupe"}</h3>
 								<p className="mt-1 text-xs text-navy-500">
 									{TYPES.find((t) => t.value === d.travelType)?.label ?? "Type"} ·{" "}
-									{suppliers.find((s) => s.id === d.supplierId)?.name ?? d.supplierName ?? "Fournisseur"}
+									{lockedSupplier?.name ?? suppliers.find((s) => s.id === d.supplierId)?.name ?? d.supplierName ?? "Fournisseur"}
 								</p>
 								<p className="mt-0.5 text-xs text-navy-500">
 									Départ&nbsp;: {d.departureDate || "—"} · {d.departureCity || "—"}

@@ -6,12 +6,37 @@ import { Topbar } from "@/components/layout/topbar";
 export default async function AppLayout({ children }) {
 	const user = await requireUser();
 
-	const [requests, notifications] = await Promise.all([
+	const [requests, notifications, relations, messageParticipants] = await Promise.all([
 		prisma.interestRequest.count({ where: { sellerUserId: user.id, status: "NEW" } }),
 		prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+		prisma.agentRelation.count({ where: { addresseeId: user.id, status: "PENDING" } }),
+		prisma.conversationParticipant.findMany({
+			where: {
+				userId: user.id,
+			},
+			select: {
+				lastReadAt: true,
+				conversation: {
+					select: {
+						updatedAt: true,
+						messages: {
+							where: { senderId: { not: user.id } },
+							take: 1,
+							orderBy: { createdAt: "desc" },
+						},
+					},
+				},
+			},
+		}),
 	]);
 
-	const counts = { requests, notifications };
+	const messages = messageParticipants.filter((p) => {
+		if (!p.conversation.messages.length) return false;
+		if (!p.lastReadAt) return true;
+		return p.conversation.updatedAt > p.lastReadAt;
+	}).length;
+
+	const counts = { requests, notifications, relations, messages };
 
 	return (
 		<div className="flex h-screen overflow-hidden bg-navy-50/60">

@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useFormState } from "react-dom";
@@ -9,7 +10,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { loginAction } from "@/actions/auth";
 import Logo from "@/components/Logo";
 
-export default function LoginPage() {
+function LoginPageForm() {
 	const [state, formAction] = useFormState(loginAction, {});
 	const next = useSearchParams().get("suivant") ?? "";
 
@@ -90,5 +91,13 @@ export default function LoginPage() {
 				</Link>
 			</p>
 		</div>
+	);
+}
+
+export default function LoginPage() {
+	return (
+		<Suspense fallback={<div className="w-[70%] rounded-xl bg-white p-8 shadow-sm ring-1 ring-navy-100" />}>
+			<LoginPageForm />
+		</Suspense>
 	);
 }
